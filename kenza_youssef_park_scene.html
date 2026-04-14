@@ -1,0 +1,795 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+
+  #scene {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    position: relative;
+    user-select: none;
+  }
+
+  #sky-canvas {
+    width: 100%;
+    display: block;
+  }
+
+  #ui-layer {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 12px;
+    pointer-events: none;
+  }
+
+  #dialogue-box {
+    background: rgba(15,12,8,0.72);
+    border-radius: 10px;
+    padding: 14px 18px;
+    color: #f0ead8;
+    font-size: 14px;
+    line-height: 1.65;
+    min-height: 80px;
+    pointer-events: auto;
+    border: 0.5px solid rgba(255,210,140,0.18);
+    backdrop-filter: blur(2px);
+  }
+
+  #speaker {
+    font-size: 11px;
+    font-weight: 500;
+    color: #f0c060;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  #dialogue-text {
+    min-height: 40px;
+  }
+
+  #choices {
+    display: none;
+    gap: 10px;
+    margin-top: 12px;
+    pointer-events: auto;
+  }
+
+  .choice-btn {
+    padding: 9px 24px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255,210,140,0.5);
+    background: rgba(255,255,255,0.07);
+    color: #f0ead8;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    letter-spacing: 0.04em;
+  }
+  .choice-btn:hover { background: rgba(255,210,140,0.18); transform: scale(1.03); }
+  .choice-btn.yes { border-color: #f0c060; color: #ffd780; }
+  .choice-btn.no  { border-color: #8ab0d0; color: #aac8e8; }
+
+  #tap-hint {
+    font-size: 11px;
+    color: rgba(240,210,140,0.5);
+    text-align: right;
+    margin-top: 6px;
+    opacity: 1;
+    transition: opacity 0.4s;
+  }
+
+  #status-tag {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-size: 11px;
+    color: rgba(240,210,140,0.7);
+    background: rgba(0,0,0,0.35);
+    padding: 3px 9px;
+    border-radius: 20px;
+    pointer-events: none;
+  }
+
+  #overlay-fade {
+    position: absolute;
+    top:0;left:0;right:0;bottom:0;
+    background: black;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 1.8s;
+  }
+</style>
+
+<div id="scene">
+  <canvas id="sky-canvas" height="380"></canvas>
+  <div id="overlay-fade"></div>
+  <div id="status-tag" id="status-tag">Park — Day</div>
+  <div id="ui-layer">
+    <div id="dialogue-box">
+      <div id="speaker"></div>
+      <div id="dialogue-text"></div>
+      <div id="choices">
+        <button class="choice-btn yes" onclick="choose('yes')">YES</button>
+        <button class="choice-btn no" onclick="choose('no')">NO</button>
+      </div>
+      <div id="tap-hint">tap to continue</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('sky-canvas');
+const ctx = canvas.getContext('2d');
+const scene = document.getElementById('scene');
+
+function resize() {
+  const w = scene.offsetWidth || 720;
+  canvas.width = w;
+  canvas.height = Math.round(w * 0.53);
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ─── Scene state ───────────────────────────────────────────────
+let sceneMode = 'day'; // 'day' | 'sunset' | 'night'
+let rainDrops = [];
+let sceneTime = 0;
+let choiceMade = false;
+let endingPlayed = false;
+let hug = false;
+let walkAway = false;
+let walkOffset = 0;
+let warmGlow = 0;
+let rainOpacity = 0;
+let rainTarget = 0;
+
+// Characters
+const chars = {
+  kenza: { x: 0.38, y: 0, vy: 0, walking: true, walkFrame: 0, arrived: false },
+  youssef: { x: 0.62, y: 0, vy: 0, walkFrame: 0 },
+  tonic: { x: 0.32, y: 0, sit: true, tailAngle: 0, blinkT: 0, sitPhase: 0 },
+  pooki: { x: 0.55, y: 0, vx: 0.0002, walkFrame: 0, dir: 1, pauseT: 0, tailAngle: 0, circling: false, circleAngle: 0 }
+};
+
+// ─── Palette ───────────────────────────────────────────────────
+const pal = {
+  skyDay:   ['#b8dff0','#d4eef7','#e8f5fb'],
+  skySunset:['#f7c87a','#f0a050','#e86838'],
+  skyNight: ['#0a0c1e','#13183a','#1e2450'],
+  grass: '#6aad5a',
+  grassShadow: '#4d8a3a',
+  path: '#c8b898',
+  bench: '#8a6a3a',
+  tree: '#3a7a2a',
+  trunk: '#7a5a2a',
+  skin1: '#c8926a',
+  skin2: '#b07848',
+  hair1: '#1a0e0a',
+  hair2: '#3a2010',
+  dress: '#7a8ec8',
+  shirt: '#c0b098',
+  tonicColor: '#d0c8b8',
+  tonicMarkings: '#a89878',
+  pookiColor: '#e8e0d0',
+  pookiMarkings: '#c0a888',
+};
+
+// ─── Sky gradient ──────────────────────────────────────────────
+function getSkyColors() {
+  if (sceneMode === 'day') return pal.skyDay;
+  if (sceneMode === 'sunset') return pal.skySunset;
+  return pal.skyNight;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpColor(c1, c2, t) {
+  const h = s => parseInt(s,16);
+  const r1=h(c1.slice(1,3)),g1=h(c1.slice(3,5)),b1=h(c1.slice(5,7));
+  const r2=h(c2.slice(1,3)),g2=h(c2.slice(3,5)),b2=h(c2.slice(5,7));
+  const r=Math.round(lerp(r1,r2,t)).toString(16).padStart(2,'0');
+  const g=Math.round(lerp(g1,g2,t)).toString(16).padStart(2,'0');
+  const b=Math.round(lerp(b1,b2,t)).toString(16).padStart(2,'0');
+  return '#'+r+g+b;
+}
+
+// ─── Rain ──────────────────────────────────────────────────────
+function spawnRain() {
+  const w = canvas.width, h = canvas.height;
+  for (let i = 0; i < 3; i++) {
+    rainDrops.push({ x: Math.random()*w, y: Math.random()*h*0.5, vy: 6+Math.random()*4, len: 8+Math.random()*8, alpha: 0.35+Math.random()*0.3 });
+  }
+  if (rainDrops.length > 220) rainDrops.splice(0,50);
+}
+
+// ─── Draw sky ─────────────────────────────────────────────────
+function drawSky() {
+  const w=canvas.width, h=canvas.height;
+  const sc = getSkyColors();
+  const grad = ctx.createLinearGradient(0,0,0,h*0.65);
+  grad.addColorStop(0, sc[0]);
+  grad.addColorStop(0.55, sc[1]);
+  grad.addColorStop(1, sc[2]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
+
+  // Sun / moon
+  if (sceneMode === 'day') {
+    ctx.fillStyle = '#fffbe8';
+    ctx.beginPath(); ctx.arc(w*0.82, h*0.13, h*0.055, 0, Math.PI*2); ctx.fill();
+  } else if (sceneMode === 'sunset') {
+    ctx.fillStyle = '#ffd060';
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.arc(w*0.72, h*0.28, h*0.07, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.fillStyle = '#e8e0c0';
+    ctx.beginPath(); ctx.arc(w*0.82, h*0.12, h*0.038, 0, Math.PI*2); ctx.fill();
+    // stars
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    const starPos = [[0.1,0.08],[0.22,0.05],[0.35,0.12],[0.5,0.04],[0.6,0.1],[0.75,0.07],[0.15,0.18],[0.45,0.17]];
+    starPos.forEach(([sx,sy])=>{
+      ctx.beginPath(); ctx.arc(sx*w, sy*h, 1.5, 0, Math.PI*2); ctx.fill();
+    });
+  }
+}
+
+// ─── Draw ground ──────────────────────────────────────────────
+function drawGround() {
+  const w=canvas.width, h=canvas.height;
+  const gy = h*0.62;
+  const gr = ctx.createLinearGradient(0,gy,0,h);
+  gr.addColorStop(0, pal.grass);
+  gr.addColorStop(1, pal.grassShadow);
+  ctx.fillStyle = gr;
+  ctx.fillRect(0, gy, w, h-gy);
+
+  // Path
+  ctx.fillStyle = pal.path;
+  ctx.beginPath();
+  ctx.moveTo(w*0.25, gy+2);
+  ctx.lineTo(w*0.75, gy+2);
+  ctx.lineTo(w*0.82, h);
+  ctx.lineTo(w*0.18, h);
+  ctx.fill();
+}
+
+// ─── Draw bench ───────────────────────────────────────────────
+function drawBench(x,y) {
+  const w=canvas.width, h=canvas.height;
+  const bw=w*0.11, bh=h*0.05;
+  ctx.fillStyle = pal.bench;
+  ctx.fillRect(x-bw/2, y, bw, bh*0.22);
+  ctx.fillRect(x-bw/2, y+bh*0.38, bw, bh*0.18);
+  ctx.fillStyle = '#6a4a1a';
+  ctx.fillRect(x-bw/2+bw*0.1, y, bw*0.08, bh*0.55);
+  ctx.fillRect(x+bw/2-bw*0.18, y, bw*0.08, bh*0.55);
+}
+
+// ─── Draw tree ────────────────────────────────────────────────
+function drawTree(x,y,scale=1) {
+  const w=canvas.width, h=canvas.height;
+  ctx.fillStyle = pal.trunk;
+  ctx.fillRect(x-w*0.012*scale, y-h*0.01, w*0.024*scale, h*0.12*scale);
+  ctx.fillStyle = pal.tree;
+  ctx.beginPath();
+  ctx.arc(x, y-h*0.07*scale, w*0.06*scale, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#2d6020';
+  ctx.beginPath();
+  ctx.arc(x-w*0.02*scale, y-h*0.09*scale, w*0.035*scale, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// ─── Draw cat ─────────────────────────────────────────────────
+function drawCat(cx,cy, color, markings, facing, sitting, tailAngle, walkFrame, blink) {
+  const w=canvas.width, h=canvas.height;
+  const s = h*0.042;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (facing < 0) ctx.scale(-1,1);
+
+  // Tail
+  const ta = sitting ? tailAngle : Math.sin(walkFrame*0.18)*0.5 + tailAngle;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = s*0.3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (sitting) {
+    ctx.moveTo(-s*0.3, 0);
+    ctx.quadraticCurveTo(-s*0.8+Math.sin(ta)*s*0.4, s*0.3, -s*0.5+Math.sin(ta)*s*0.6, -s*0.2);
+  } else {
+    ctx.moveTo(-s*0.5, s*0.1);
+    ctx.quadraticCurveTo(-s*(0.9+Math.sin(ta)*0.3), -s*0.3, -s*0.3, -s*0.7);
+  }
+  ctx.stroke();
+
+  // Body
+  ctx.fillStyle = color;
+  if (sitting) {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s*0.6, s*0.7, 0, 0, Math.PI*2); ctx.fill();
+  } else {
+    const bob = Math.sin(walkFrame*0.35)*s*0.05;
+    ctx.beginPath();
+    ctx.ellipse(0, bob, s*0.75, s*0.45, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = color;
+    const legY = s*0.38+bob;
+    const lx = Math.sin(walkFrame*0.35)*s*0.12;
+    ctx.fillRect(-s*0.5+lx, legY, s*0.18, s*0.32);
+    ctx.fillRect(-s*0.1-lx, legY, s*0.18, s*0.32);
+    ctx.fillRect(s*0.1+lx, legY, s*0.18, s*0.32);
+    ctx.fillRect(s*0.35-lx, legY, s*0.18, s*0.32);
+  }
+
+  // Markings stripe
+  ctx.fillStyle = markings;
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.ellipse(s*0.1, sitting ? -s*0.1 : 0, s*0.22, s*0.3, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Head
+  ctx.fillStyle = color;
+  const hx = sitting ? s*0.05 : s*0.62;
+  const hy = sitting ? -s*0.62 : (Math.sin(walkFrame*0.35)*s*0.05 - s*0.28);
+  ctx.beginPath();
+  ctx.ellipse(hx, hy, s*0.42, s*0.38, 0, 0, Math.PI*2); ctx.fill();
+
+  // Ears
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(hx-s*0.25, hy-s*0.28);
+  ctx.lineTo(hx-s*0.38, hy-s*0.58);
+  ctx.lineTo(hx-s*0.08, hy-s*0.35);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hx+s*0.08, hy-s*0.35);
+  ctx.lineTo(hx+s*0.38, hy-s*0.58);
+  ctx.lineTo(hx+s*0.25, hy-s*0.28);
+  ctx.fill();
+  // Inner ear
+  ctx.fillStyle = '#e8a090';
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(hx-s*0.22, hy-s*0.32);
+  ctx.lineTo(hx-s*0.32, hy-s*0.5);
+  ctx.lineTo(hx-s*0.1, hy-s*0.36);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hx+s*0.1, hy-s*0.36);
+  ctx.lineTo(hx+s*0.32, hy-s*0.5);
+  ctx.lineTo(hx+s*0.22, hy-s*0.32);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Eyes
+  const eyeOpen = blink > 0.8 ? 0 : 1;
+  ctx.fillStyle = '#2a1a08';
+  if (eyeOpen) {
+    ctx.beginPath(); ctx.ellipse(hx-s*0.15, hy-s*0.06, s*0.08, s*0.1, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx+s*0.15, hy-s*0.06, s*0.08, s*0.1, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,200,0.5)';
+    ctx.beginPath(); ctx.arc(hx-s*0.12, hy-s*0.1, s*0.03, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx+s*0.18, hy-s*0.1, s*0.03, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = s*0.05;
+    ctx.beginPath(); ctx.moveTo(hx-s*0.22,hy-s*0.06); ctx.lineTo(hx-s*0.08,hy-s*0.06); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx+s*0.08,hy-s*0.06); ctx.lineTo(hx+s*0.22,hy-s*0.06); ctx.stroke();
+  }
+
+  // Nose
+  ctx.fillStyle = '#e07878';
+  ctx.beginPath();
+  ctx.moveTo(hx, hy+s*0.06);
+  ctx.lineTo(hx-s*0.07, hy+s*0.14);
+  ctx.lineTo(hx+s*0.07, hy+s*0.14);
+  ctx.fill();
+
+  // Whiskers
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.7;
+  [[hx-s*0.45,hy+s*0.1,hx-s*0.08,hy+s*0.09],[hx-s*0.45,hy+s*0.16,hx-s*0.08,hy+s*0.14],
+   [hx+s*0.08,hy+s*0.09,hx+s*0.45,hy+s*0.1],[hx+s*0.08,hy+s*0.14,hx+s*0.45,hy+s*0.16]].forEach(([x1,y1,x2,y2])=>{
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+// ─── Draw person ──────────────────────────────────────────────
+function drawPerson(cx, cy, skinC, hairC, clothColor, facing, walkFrame, isKenza) {
+  const w=canvas.width, h=canvas.height;
+  const s = h*0.072;
+  const bob = Math.sin(walkFrame*0.22)*s*0.03;
+
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+  if (facing < 0) ctx.scale(-1,1);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath(); ctx.ellipse(0, s*0.05, s*0.38, s*0.06, 0, 0, Math.PI*2); ctx.fill();
+
+  // Legs
+  const lswing = Math.sin(walkFrame*0.22)*s*0.22;
+  ctx.fillStyle = isKenza ? '#4858a8' : '#7a6848';
+  ctx.beginPath(); ctx.ellipse(-s*0.12+lswing, s*0.62, s*0.09, s*0.28, lswing*0.02, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s*0.12-lswing, s*0.62, s*0.09, s*0.28, -lswing*0.02, 0, Math.PI*2); ctx.fill();
+  // Shoes
+  ctx.fillStyle = isKenza ? '#a08060' : '#3a3028';
+  ctx.beginPath(); ctx.ellipse(-s*0.12+lswing, s*0.88, s*0.13, s*0.07, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s*0.12-lswing, s*0.88, s*0.13, s*0.07, 0, 0, Math.PI*2); ctx.fill();
+
+  // Body
+  ctx.fillStyle = clothColor;
+  ctx.beginPath();
+  ctx.ellipse(0, s*0.28, s*0.28, s*0.38, 0, 0, Math.PI*2); ctx.fill();
+
+  // Arms
+  const aswing = Math.sin(walkFrame*0.22)*s*0.15;
+  ctx.strokeStyle = clothColor; ctx.lineWidth = s*0.18; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-s*0.22,s*0.08); ctx.lineTo(-s*0.35+aswing,s*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s*0.22,s*0.08); ctx.lineTo(s*0.35-aswing,s*0.5); ctx.stroke();
+  // Hands
+  ctx.fillStyle = skinC;
+  ctx.beginPath(); ctx.arc(-s*0.35+aswing, s*0.52, s*0.1, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(s*0.35-aswing, s*0.52, s*0.1, 0, Math.PI*2); ctx.fill();
+
+  // Neck
+  ctx.fillStyle = skinC;
+  ctx.fillRect(-s*0.08, -s*0.12, s*0.16, s*0.14);
+
+  // Head
+  ctx.beginPath(); ctx.ellipse(0, -s*0.32, s*0.24, s*0.28, 0, 0, Math.PI*2); ctx.fill();
+
+  // Hair
+  ctx.fillStyle = hairC;
+  ctx.beginPath();
+  ctx.ellipse(0, -s*0.44, s*0.24, s*0.18, 0, 0, Math.PI*2); ctx.fill();
+  if (isKenza) {
+    // Longer hair
+    ctx.beginPath();
+    ctx.ellipse(-s*0.05, -s*0.14, s*0.15, s*0.32, -0.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(s*0.05, -s*0.14, s*0.15, s*0.32, 0.2, 0, Math.PI*2); ctx.fill();
+  }
+
+  // Eyes
+  ctx.fillStyle = '#1a0e06';
+  ctx.beginPath(); ctx.ellipse(-s*0.09, -s*0.34, s*0.04, s*0.05, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s*0.09, -s*0.34, s*0.04, s*0.05, 0, 0, Math.PI*2); ctx.fill();
+
+  // Mouth - slight smile
+  ctx.strokeStyle = '#8a4a3a'; ctx.lineWidth = s*0.03;
+  ctx.beginPath(); ctx.arc(0, -s*0.22, s*0.07, 0.2, Math.PI-0.2); ctx.stroke();
+
+  ctx.restore();
+}
+
+// ─── Hug animation ────────────────────────────────────────────
+function drawHug(kx,ky,yx,yy) {
+  const w=canvas.width, h=canvas.height;
+  const cx = (kx+yx)/2;
+  const cy = Math.min(ky,yy);
+  const s = h*0.072;
+
+  // Warm glow
+  if (warmGlow > 0) {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s*2.5);
+    g.addColorStop(0, `rgba(255,200,80,${warmGlow*0.18})`);
+    g.addColorStop(1, 'rgba(255,200,80,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, s*2.5, 0, Math.PI*2); ctx.fill();
+  }
+
+  drawPerson(kx, ky, pal.skin1, pal.hair1, pal.dress, 1, 0, true);
+  drawPerson(yx, yy, pal.skin2, pal.hair2, pal.shirt, -1, 0, false);
+  // Arms hugging
+  ctx.strokeStyle = pal.dress; ctx.lineWidth = s*0.18; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(kx+s*0.22, ky+s*0.08); ctx.quadraticCurveTo(cx, ky, yx-s*0.22, yy+s*0.08); ctx.stroke();
+  ctx.strokeStyle = pal.shirt;
+  ctx.beginPath(); ctx.moveTo(yx-s*0.22, yy+s*0.08); ctx.quadraticCurveTo(cx, yy, kx+s*0.22, ky+s*0.08); ctx.stroke();
+}
+
+// ─── Main draw loop ───────────────────────────────────────────
+function draw(t) {
+  sceneTime = t * 0.001;
+  const w=canvas.width, h=canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  drawSky();
+  drawGround();
+  drawTree(w*0.12, h*0.62, 1.1);
+  drawTree(w*0.88, h*0.62, 0.9);
+  drawBench(w*0.28, h*0.66);
+
+  // Ground Y positions
+  const gy = h*0.66;
+
+  // Tonic – near bench, occasionally stands next to kenza
+  const tonicX = (tonicFollowYoussef && walkAway)
+    ? w*0.62 + walkOffset
+    : (showChoices || choiceMade ? w*chars.kenza.x - h*0.05 : w*0.26);
+  const tonicSit = !tonicFollowYoussef || !walkAway;
+  chars.tonic.tailAngle = Math.sin(sceneTime*0.7)*0.35;
+  chars.tonic.blinkT = Math.sin(sceneTime*1.1);
+  drawCat(tonicX, gy, pal.tonicColor, pal.tonicMarkings, 1, tonicSit, chars.tonic.tailAngle, sceneTime*10, chars.tonic.blinkT);
+
+  // Pooki – wandering
+  if (!choiceMade) {
+    chars.pooki.x += chars.pooki.vx * chars.pooki.dir;
+    if (chars.pooki.x > 0.65 || chars.pooki.x < 0.42) {
+      chars.pooki.dir *= -1;
+    }
+  } else if (pookiCircle) {
+    chars.pooki.circleAngle += 0.018;
+    const cx2 = (w*chars.kenza.x + w*chars.youssef.x)/2;
+    chars.pooki.x = (cx2 + Math.cos(chars.pooki.circleAngle)*w*0.07) / w;
+  } else if (pookiStayKenza) {
+    chars.pooki.x = chars.kenza.x + 0.06;
+  }
+  chars.pooki.tailAngle = Math.sin(sceneTime*1.4)*0.5;
+  const pookiWalking = Math.abs(chars.pooki.vx) > 0;
+  drawCat(w*chars.pooki.x, gy, pal.pookiColor, pal.pookiMarkings, chars.pooki.dir, false, chars.pooki.tailAngle, sceneTime*14, 0);
+
+  // Characters
+  const kx = w*chars.kenza.x;
+  const yx = w*chars.youssef.x + walkOffset;
+  const py = gy;
+
+  if (hug) {
+    drawHug(kx, py, yx, py);
+  } else {
+    drawPerson(kx, py, pal.skin1, pal.hair1, pal.dress, 1, chars.kenza.walking ? sceneTime*12 : 0, true);
+    drawPerson(yx, py, pal.skin2, pal.hair2, pal.shirt, -1, 0, false);
+  }
+
+  // Rain
+  if (sceneMode === 'night') {
+    rainOpacity += (rainTarget - rainOpacity)*0.02;
+    spawnRain();
+    ctx.strokeStyle = `rgba(160,180,210,${rainOpacity})`;
+    ctx.lineWidth = 0.8;
+    rainDrops.forEach(d => {
+      d.y += d.vy;
+      if (d.y > h) { d.y = -20; d.x = Math.random()*w; }
+      ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-1,d.y+d.len); ctx.stroke();
+    });
+  }
+
+  // Warm glow post-hug
+  if (sceneMode === 'sunset' && hug) {
+    warmGlow = Math.min(warmGlow + 0.008, 1);
+  }
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// ─── Dialogue system ──────────────────────────────────────────
+let dialogueStep = 0;
+let typing = false;
+let typingTimer = null;
+let displayedText = '';
+let showChoices = false;
+let pookiCircle = false;
+let pookiStayKenza = false;
+let tonicFollowYoussef = false;
+
+const speakerEl = document.getElementById('speaker');
+const textEl = document.getElementById('dialogue-text');
+const choicesEl = document.getElementById('choices');
+const hintEl = document.getElementById('tap-hint');
+const statusTag = document.getElementById('status-tag');
+const overlayFade = document.getElementById('overlay-fade');
+
+const script = [
+  { speaker: '', text: 'Kenza walks into the park. The air is quiet, warm. Tonic rests by the bench. Pooki wanders the path…', action: 'kenza_walk' },
+  { speaker: 'YOUSSEF', text: 'Hey… Kenza.', pause: true },
+  { speaker: 'YOUSSEF', text: 'I\'ve been thinking a lot lately… about us.' },
+  { speaker: 'YOUSSEF', text: 'You know… it\'s not just one thing about you.' },
+  { speaker: 'YOUSSEF', text: 'I like the way you talk… the way you tell stories, like every detail matters.' },
+  { speaker: 'YOUSSEF', text: 'And your voice… I don\'t know why, but those late phone calls… they became my favorite part of the day.' },
+  { speaker: 'POOKI', text: '— Pooki wanders between them, pausing the moment —', action: 'pooki_walk', italic: true },
+  { speaker: 'YOUSSEF', text: 'You don\'t even try… but you make everything feel calm.', smile: true },
+  { speaker: 'YOUSSEF', text: 'And the way you think… your maturity… it\'s rare.' },
+  { speaker: 'YOUSSEF', text: 'You see things differently… deeper than most people.' },
+  { speaker: '— Tonic —', text: 'Tonic quietly moves beside Kenza.', italic: true, action: 'tonic_kenza' },
+  { speaker: 'YOUSSEF', text: 'And yeah… I\'d be lying if I said I didn\'t notice how beautiful you are.' },
+  { speaker: 'YOUSSEF', text: 'But it\'s more than that… it\'s who you are.' },
+  { speaker: 'YOUSSEF', text: 'I remember when you said you weren\'t ready for a relationship… and I respected that.' },
+  { speaker: 'YOUSSEF', text: 'But… I kept wondering…' },
+  { speaker: 'YOUSSEF', text: 'Did something change?', action: 'show_choice' },
+];
+
+function typeText(text, cb) {
+  displayedText = '';
+  textEl.textContent = '';
+  typing = true;
+  let i = 0;
+  function step() {
+    if (i < text.length) {
+      displayedText += text[i++];
+      textEl.textContent = displayedText;
+      typingTimer = setTimeout(step, 28);
+    } else {
+      typing = false;
+      if (cb) cb();
+    }
+  }
+  step();
+}
+
+function showLine(idx) {
+  if (idx >= script.length) return;
+  const line = script[idx];
+
+  speakerEl.style.opacity = line.speaker ? '1' : '0';
+  speakerEl.textContent = line.speaker;
+  hintEl.style.opacity = '1';
+
+  if (line.italic) {
+    textEl.style.fontStyle = 'italic';
+    textEl.style.color = 'rgba(240,220,160,0.75)';
+  } else {
+    textEl.style.fontStyle = 'normal';
+    textEl.style.color = '#f0ead8';
+  }
+
+  if (line.action === 'kenza_walk') {
+    chars.kenza.walking = true;
+    setTimeout(()=>{ chars.kenza.walking = false; }, 1200);
+  }
+  if (line.action === 'tonic_kenza') {
+    // Tonic moves near kenza – handled in draw loop via condition
+  }
+  if (line.action === 'show_choice') {
+    typeText(line.text, () => {
+      choicesEl.style.display = 'flex';
+      hintEl.style.opacity = '0';
+      showChoices = true;
+    });
+    return;
+  }
+
+  typeText(line.text);
+}
+
+function advance() {
+  if (typing) {
+    // Skip typing
+    clearTimeout(typingTimer);
+    textEl.textContent = script[dialogueStep].text;
+    typing = false;
+    return;
+  }
+  if (showChoices || endingPlayed) return;
+  dialogueStep++;
+  if (dialogueStep < script.length) {
+    showLine(dialogueStep);
+  }
+}
+
+document.getElementById('dialogue-box').addEventListener('click', advance);
+showLine(0);
+
+// ─── Choice handler ───────────────────────────────────────────
+function choose(val) {
+  choicesEl.style.display = 'none';
+  showChoices = false;
+  choiceMade = true;
+
+  if (val === 'yes') {
+    playYesEnding();
+  } else {
+    playNoEnding();
+  }
+}
+
+function setStatus(txt) {
+  document.getElementById('status-tag').textContent = txt;
+}
+
+function playYesEnding() {
+  sceneMode = 'sunset';
+  setStatus('Park — Sunset');
+  const yesScript = [
+    { speaker: 'KENZA', text: '…Yes. Maybe I was just scared before.' },
+    { speaker: 'YOUSSEF', text: 'I didn\'t want to push you… but I\'m really glad to hear that.' },
+    { speaker: 'YOUSSEF', text: 'I meant everything I said.' },
+    { speaker: '— Pooki —', text: 'Pooki begins circling them playfully.', italic: true, action: 'pooki_circle' },
+    { speaker: 'YOUSSEF', text: 'Can I…?' },
+    { speaker: '— Kenza nods —', text: 'She nods softly. A small smile.', italic: true, action: 'hug' },
+    { speaker: '', text: '♡', italic: true, action: 'fade_end_yes' },
+  ];
+  runEnding(yesScript);
+}
+
+function playNoEnding() {
+  sceneMode = 'night';
+  rainTarget = 0.7;
+  setStatus('Park — Night');
+  const noScript = [
+    { speaker: 'KENZA', text: 'I\'m sorry… I\'m still not ready.' },
+    { speaker: '', text: '…', italic: true },
+    { speaker: 'YOUSSEF', text: '…Yeah. I understand.' },
+    { speaker: 'YOUSSEF', text: 'You deserve to take your time.' },
+    { speaker: 'YOUSSEF', text: 'Take care, Kenza.', action: 'youssef_walk' },
+    { speaker: '— Tonic —', text: 'Tonic stands and quietly follows Youssef.', italic: true, action: 'tonic_follow' },
+    { speaker: '— Pooki —', text: 'Pooki stays near Kenza. The rain continues.', italic: true, action: 'pooki_stay' },
+    { speaker: '', text: '…', italic: true, action: 'fade_end_no' },
+  ];
+  runEnding(noScript);
+}
+
+let endIdx = 0;
+let endScript = [];
+
+function runEnding(es) {
+  endScript = es;
+  endIdx = 0;
+  endingPlayed = true;
+  showEndLine(0);
+  document.getElementById('dialogue-box').addEventListener('click', advanceEnding);
+}
+
+function showEndLine(idx) {
+  if (idx >= endScript.length) return;
+  const line = endScript[idx];
+
+  speakerEl.style.opacity = line.speaker ? '1' : '0';
+  speakerEl.textContent = line.speaker;
+  hintEl.style.opacity = '1';
+
+  if (line.italic) {
+    textEl.style.fontStyle = 'italic';
+    textEl.style.color = 'rgba(240,220,160,0.75)';
+  } else {
+    textEl.style.fontStyle = 'normal';
+    textEl.style.color = '#f0ead8';
+  }
+
+  if (line.action === 'pooki_circle') pookiCircle = true;
+  if (line.action === 'hug') hug = true;
+  if (line.action === 'youssef_walk') {
+    let wi = 0;
+    const go = setInterval(()=>{ walkOffset += 2.2; wi++; if(wi>80) clearInterval(go); },30);
+  }
+  if (line.action === 'tonic_follow') tonicFollowYoussef = true;
+  if (line.action === 'pooki_stay') pookiStayKenza = true;
+  if (line.action === 'fade_end_yes' || line.action === 'fade_end_no') {
+    setTimeout(()=>{
+      overlayFade.style.opacity = '1';
+      hintEl.style.opacity = '0';
+      speakerEl.style.opacity = '0';
+      textEl.textContent = '';
+    }, 900);
+    return;
+  }
+
+  typeText(line.text);
+}
+
+function advanceEnding() {
+  if (typing) {
+    clearTimeout(typingTimer);
+    textEl.textContent = endScript[endIdx].text;
+    typing = false;
+    return;
+  }
+  endIdx++;
+  if (endIdx < endScript.length) {
+    showEndLine(endIdx);
+  }
+}
+</script>
