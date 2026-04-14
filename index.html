@@ -1,795 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>A Moroccan Tale</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Prevent browser zooming/scrolling */
+        }
 
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: var(--font-sans); }
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
 
-  #scene {
-    width: 100%;
-    max-width: 720px;
-    margin: 0 auto;
-    border-radius: var(--border-radius-lg);
-    overflow: hidden;
-    position: relative;
-    user-select: none;
-  }
+        /* UI Layer */
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let touches pass through to specific elements */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
 
-  #sky-canvas {
-    width: 100%;
-    display: block;
-  }
+        /* Joystick */
+        #joystickZone {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            pointer-events: auto;
+        }
+        #joystickBase {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #joystickStick {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(0px, 0px);
+        }
 
-  #ui-layer {
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    padding: 12px;
-    pointer-events: none;
-  }
+        /* Action Button */
+        #actionButton {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            user-select: none;
+            backdrop-filter: blur(4px);
+            transition: transform 0.1s, background 0.2s;
+        }
+        #actionButton:active {
+            transform: scale(0.9);
+            background: rgba(255, 255, 255, 0.5);
+        }
 
-  #dialogue-box {
-    background: rgba(15,12,8,0.72);
-    border-radius: 10px;
-    padding: 14px 18px;
-    color: #f0ead8;
-    font-size: 14px;
-    line-height: 1.65;
-    min-height: 80px;
-    pointer-events: auto;
-    border: 0.5px solid rgba(255,210,140,0.18);
-    backdrop-filter: blur(2px);
-  }
+        /* Dialogue Box */
+        #dialogueContainer {
+            position: absolute;
+            bottom: 150px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            display: none;
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #speakerName {
+            font-weight: bold;
+            color: #f39c12;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        #dialogueText {
+            font-size: 1.1em;
+            line-height: 1.4;
+            min-height: 3em;
+        }
+        #continueIndicator {
+            text-align: right;
+            font-size: 0.8em;
+            color: #aaa;
+            margin-top: 10px;
+            animation: blink 1s infinite;
+        }
 
-  #speaker {
-    font-size: 11px;
-    font-weight: 500;
-    color: #f0c060;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-bottom: 5px;
-    opacity: 0;
-    transition: opacity 0.4s;
-  }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
 
-  #dialogue-text {
-    min-height: 40px;
-  }
+        /* Choices */
+        #choiceContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            flex-direction: column;
+            gap: 20px;
+            pointer-events: auto;
+        }
+        .choiceBtn {
+            padding: 15px 40px;
+            font-size: 1.2em;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 2px solid white;
+            border-radius: 30px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .choiceBtn:active {
+            background: white;
+            color: black;
+            transform: scale(0.95);
+        }
+        
+        /* Start Screen */
+        #startScreen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+            pointer-events: auto;
+        }
+        #startBtn {
+            margin-top: 30px;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
 
-  #choices {
-    display: none;
-    gap: 10px;
-    margin-top: 12px;
-    pointer-events: auto;
-  }
+        /* Instruction overlay */
+        #instruction {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.9em;
+            pointer-events: none;
+        }
+        
+        #fadeOverlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 3s ease-in-out;
+        }
+    </style>
+</head>
+<body>
 
-  .choice-btn {
-    padding: 9px 24px;
-    border-radius: 8px;
-    border: 1.5px solid rgba(255,210,140,0.5);
-    background: rgba(255,255,255,0.07);
-    color: #f0ead8;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
-    letter-spacing: 0.04em;
-  }
-  .choice-btn:hover { background: rgba(255,210,140,0.18); transform: scale(1.03); }
-  .choice-btn.yes { border-color: #f0c060; color: #ffd780; }
-  .choice-btn.no  { border-color: #8ab0d0; color: #aac8e8; }
-
-  #tap-hint {
-    font-size: 11px;
-    color: rgba(240,210,140,0.5);
-    text-align: right;
-    margin-top: 6px;
-    opacity: 1;
-    transition: opacity 0.4s;
-  }
-
-  #status-tag {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    font-size: 11px;
-    color: rgba(240,210,140,0.7);
-    background: rgba(0,0,0,0.35);
-    padding: 3px 9px;
-    border-radius: 20px;
-    pointer-events: none;
-  }
-
-  #overlay-fade {
-    position: absolute;
-    top:0;left:0;right:0;bottom:0;
-    background: black;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 1.8s;
-  }
-</style>
-
-<div id="scene">
-  <canvas id="sky-canvas" height="380"></canvas>
-  <div id="overlay-fade"></div>
-  <div id="status-tag" id="status-tag">Park — Day</div>
-  <div id="ui-layer">
-    <div id="dialogue-box">
-      <div id="speaker"></div>
-      <div id="dialogue-text"></div>
-      <div id="choices">
-        <button class="choice-btn yes" onclick="choose('yes')">YES</button>
-        <button class="choice-btn no" onclick="choose('no')">NO</button>
-      </div>
-      <div id="tap-hint">tap to continue</div>
+    <!-- Start Screen -->
+    <div id="startScreen">
+        <h1 style="font-size: 2.5em; text-align: center; margin-bottom: 10px;">A Moroccan Tale</h1>
+        <p style="text-align: center; max-width: 80%; opacity: 0.8;">Explore the park. Talk to Youssef. Make a choice.</p>
+        <button id="startBtn">START GAME</button>
     </div>
-  </div>
-</div>
-
-<script>
-const canvas = document.getElementById('sky-canvas');
-const ctx = canvas.getContext('2d');
-const scene = document.getElementById('scene');
-
-function resize() {
-  const w = scene.offsetWidth || 720;
-  canvas.width = w;
-  canvas.height = Math.round(w * 0.53);
-}
-resize();
-window.addEventListener('resize', () => { resize(); });
-
-// ─── Scene state ───────────────────────────────────────────────
-let sceneMode = 'day'; // 'day' | 'sunset' | 'night'
-let rainDrops = [];
-let sceneTime = 0;
-let choiceMade = false;
-let endingPlayed = false;
-let hug = false;
-let walkAway = false;
-let walkOffset = 0;
-let warmGlow = 0;
-let rainOpacity = 0;
-let rainTarget = 0;
-
-// Characters
-const chars = {
-  kenza: { x: 0.38, y: 0, vy: 0, walking: true, walkFrame: 0, arrived: false },
-  youssef: { x: 0.62, y: 0, vy: 0, walkFrame: 0 },
-  tonic: { x: 0.32, y: 0, sit: true, tailAngle: 0, blinkT: 0, sitPhase: 0 },
-  pooki: { x: 0.55, y: 0, vx: 0.0002, walkFrame: 0, dir: 1, pauseT: 0, tailAngle: 0, circling: false, circleAngle: 0 }
-};
-
-// ─── Palette ───────────────────────────────────────────────────
-const pal = {
-  skyDay:   ['#b8dff0','#d4eef7','#e8f5fb'],
-  skySunset:['#f7c87a','#f0a050','#e86838'],
-  skyNight: ['#0a0c1e','#13183a','#1e2450'],
-  grass: '#6aad5a',
-  grassShadow: '#4d8a3a',
-  path: '#c8b898',
-  bench: '#8a6a3a',
-  tree: '#3a7a2a',
-  trunk: '#7a5a2a',
-  skin1: '#c8926a',
-  skin2: '#b07848',
-  hair1: '#1a0e0a',
-  hair2: '#3a2010',
-  dress: '#7a8ec8',
-  shirt: '#c0b098',
-  tonicColor: '#d0c8b8',
-  tonicMarkings: '#a89878',
-  pookiColor: '#e8e0d0',
-  pookiMarkings: '#c0a888',
-};
-
-// ─── Sky gradient ──────────────────────────────────────────────
-function getSkyColors() {
-  if (sceneMode === 'day') return pal.skyDay;
-  if (sceneMode === 'sunset') return pal.skySunset;
-  return pal.skyNight;
-}
-
-function lerp(a, b, t) { return a + (b - a) * t; }
-function lerpColor(c1, c2, t) {
-  const h = s => parseInt(s,16);
-  const r1=h(c1.slice(1,3)),g1=h(c1.slice(3,5)),b1=h(c1.slice(5,7));
-  const r2=h(c2.slice(1,3)),g2=h(c2.slice(3,5)),b2=h(c2.slice(5,7));
-  const r=Math.round(lerp(r1,r2,t)).toString(16).padStart(2,'0');
-  const g=Math.round(lerp(g1,g2,t)).toString(16).padStart(2,'0');
-  const b=Math.round(lerp(b1,b2,t)).toString(16).padStart(2,'0');
-  return '#'+r+g+b;
-}
-
-// ─── Rain ──────────────────────────────────────────────────────
-function spawnRain() {
-  const w = canvas.width, h = canvas.height;
-  for (let i = 0; i < 3; i++) {
-    rainDrops.push({ x: Math.random()*w, y: Math.random()*h*0.5, vy: 6+Math.random()*4, len: 8+Math.random()*8, alpha: 0.35+Math.random()*0.3 });
-  }
-  if (rainDrops.length > 220) rainDrops.splice(0,50);
-}
-
-// ─── Draw sky ─────────────────────────────────────────────────
-function drawSky() {
-  const w=canvas.width, h=canvas.height;
-  const sc = getSkyColors();
-  const grad = ctx.createLinearGradient(0,0,0,h*0.65);
-  grad.addColorStop(0, sc[0]);
-  grad.addColorStop(0.55, sc[1]);
-  grad.addColorStop(1, sc[2]);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,w,h);
-
-  // Sun / moon
-  if (sceneMode === 'day') {
-    ctx.fillStyle = '#fffbe8';
-    ctx.beginPath(); ctx.arc(w*0.82, h*0.13, h*0.055, 0, Math.PI*2); ctx.fill();
-  } else if (sceneMode === 'sunset') {
-    ctx.fillStyle = '#ffd060';
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(w*0.72, h*0.28, h*0.07, 0, Math.PI*2); ctx.fill();
-    ctx.globalAlpha = 1;
-  } else {
-    ctx.fillStyle = '#e8e0c0';
-    ctx.beginPath(); ctx.arc(w*0.82, h*0.12, h*0.038, 0, Math.PI*2); ctx.fill();
-    // stars
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    const starPos = [[0.1,0.08],[0.22,0.05],[0.35,0.12],[0.5,0.04],[0.6,0.1],[0.75,0.07],[0.15,0.18],[0.45,0.17]];
-    starPos.forEach(([sx,sy])=>{
-      ctx.beginPath(); ctx.arc(sx*w, sy*h, 1.5, 0, Math.PI*2); ctx.fill();
-    });
-  }
-}
-
-// ─── Draw ground ──────────────────────────────────────────────
-function drawGround() {
-  const w=canvas.width, h=canvas.height;
-  const gy = h*0.62;
-  const gr = ctx.createLinearGradient(0,gy,0,h);
-  gr.addColorStop(0, pal.grass);
-  gr.addColorStop(1, pal.grassShadow);
-  ctx.fillStyle = gr;
-  ctx.fillRect(0, gy, w, h-gy);
-
-  // Path
-  ctx.fillStyle = pal.path;
-  ctx.beginPath();
-  ctx.moveTo(w*0.25, gy+2);
-  ctx.lineTo(w*0.75, gy+2);
-  ctx.lineTo(w*0.82, h);
-  ctx.lineTo(w*0.18, h);
-  ctx.fill();
-}
-
-// ─── Draw bench ───────────────────────────────────────────────
-function drawBench(x,y) {
-  const w=canvas.width, h=canvas.height;
-  const bw=w*0.11, bh=h*0.05;
-  ctx.fillStyle = pal.bench;
-  ctx.fillRect(x-bw/2, y, bw, bh*0.22);
-  ctx.fillRect(x-bw/2, y+bh*0.38, bw, bh*0.18);
-  ctx.fillStyle = '#6a4a1a';
-  ctx.fillRect(x-bw/2+bw*0.1, y, bw*0.08, bh*0.55);
-  ctx.fillRect(x+bw/2-bw*0.18, y, bw*0.08, bh*0.55);
-}
-
-// ─── Draw tree ────────────────────────────────────────────────
-function drawTree(x,y,scale=1) {
-  const w=canvas.width, h=canvas.height;
-  ctx.fillStyle = pal.trunk;
-  ctx.fillRect(x-w*0.012*scale, y-h*0.01, w*0.024*scale, h*0.12*scale);
-  ctx.fillStyle = pal.tree;
-  ctx.beginPath();
-  ctx.arc(x, y-h*0.07*scale, w*0.06*scale, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#2d6020';
-  ctx.beginPath();
-  ctx.arc(x-w*0.02*scale, y-h*0.09*scale, w*0.035*scale, 0, Math.PI*2);
-  ctx.fill();
-}
-
-// ─── Draw cat ─────────────────────────────────────────────────
-function drawCat(cx,cy, color, markings, facing, sitting, tailAngle, walkFrame, blink) {
-  const w=canvas.width, h=canvas.height;
-  const s = h*0.042;
-
-  ctx.save();
-  ctx.translate(cx, cy);
-  if (facing < 0) ctx.scale(-1,1);
-
-  // Tail
-  const ta = sitting ? tailAngle : Math.sin(walkFrame*0.18)*0.5 + tailAngle;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = s*0.3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  if (sitting) {
-    ctx.moveTo(-s*0.3, 0);
-    ctx.quadraticCurveTo(-s*0.8+Math.sin(ta)*s*0.4, s*0.3, -s*0.5+Math.sin(ta)*s*0.6, -s*0.2);
-  } else {
-    ctx.moveTo(-s*0.5, s*0.1);
-    ctx.quadraticCurveTo(-s*(0.9+Math.sin(ta)*0.3), -s*0.3, -s*0.3, -s*0.7);
-  }
-  ctx.stroke();
-
-  // Body
-  ctx.fillStyle = color;
-  if (sitting) {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, s*0.6, s*0.7, 0, 0, Math.PI*2); ctx.fill();
-  } else {
-    const bob = Math.sin(walkFrame*0.35)*s*0.05;
-    ctx.beginPath();
-    ctx.ellipse(0, bob, s*0.75, s*0.45, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = color;
-    const legY = s*0.38+bob;
-    const lx = Math.sin(walkFrame*0.35)*s*0.12;
-    ctx.fillRect(-s*0.5+lx, legY, s*0.18, s*0.32);
-    ctx.fillRect(-s*0.1-lx, legY, s*0.18, s*0.32);
-    ctx.fillRect(s*0.1+lx, legY, s*0.18, s*0.32);
-    ctx.fillRect(s*0.35-lx, legY, s*0.18, s*0.32);
-  }
-
-  // Markings stripe
-  ctx.fillStyle = markings;
-  ctx.globalAlpha = 0.35;
-  ctx.beginPath();
-  ctx.ellipse(s*0.1, sitting ? -s*0.1 : 0, s*0.22, s*0.3, -0.3, 0, Math.PI*2); ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Head
-  ctx.fillStyle = color;
-  const hx = sitting ? s*0.05 : s*0.62;
-  const hy = sitting ? -s*0.62 : (Math.sin(walkFrame*0.35)*s*0.05 - s*0.28);
-  ctx.beginPath();
-  ctx.ellipse(hx, hy, s*0.42, s*0.38, 0, 0, Math.PI*2); ctx.fill();
-
-  // Ears
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(hx-s*0.25, hy-s*0.28);
-  ctx.lineTo(hx-s*0.38, hy-s*0.58);
-  ctx.lineTo(hx-s*0.08, hy-s*0.35);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(hx+s*0.08, hy-s*0.35);
-  ctx.lineTo(hx+s*0.38, hy-s*0.58);
-  ctx.lineTo(hx+s*0.25, hy-s*0.28);
-  ctx.fill();
-  // Inner ear
-  ctx.fillStyle = '#e8a090';
-  ctx.globalAlpha = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(hx-s*0.22, hy-s*0.32);
-  ctx.lineTo(hx-s*0.32, hy-s*0.5);
-  ctx.lineTo(hx-s*0.1, hy-s*0.36);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(hx+s*0.1, hy-s*0.36);
-  ctx.lineTo(hx+s*0.32, hy-s*0.5);
-  ctx.lineTo(hx+s*0.22, hy-s*0.32);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Eyes
-  const eyeOpen = blink > 0.8 ? 0 : 1;
-  ctx.fillStyle = '#2a1a08';
-  if (eyeOpen) {
-    ctx.beginPath(); ctx.ellipse(hx-s*0.15, hy-s*0.06, s*0.08, s*0.1, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hx+s*0.15, hy-s*0.06, s*0.08, s*0.1, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,200,0.5)';
-    ctx.beginPath(); ctx.arc(hx-s*0.12, hy-s*0.1, s*0.03, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(hx+s*0.18, hy-s*0.1, s*0.03, 0, Math.PI*2); ctx.fill();
-  } else {
-    ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = s*0.05;
-    ctx.beginPath(); ctx.moveTo(hx-s*0.22,hy-s*0.06); ctx.lineTo(hx-s*0.08,hy-s*0.06); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(hx+s*0.08,hy-s*0.06); ctx.lineTo(hx+s*0.22,hy-s*0.06); ctx.stroke();
-  }
-
-  // Nose
-  ctx.fillStyle = '#e07878';
-  ctx.beginPath();
-  ctx.moveTo(hx, hy+s*0.06);
-  ctx.lineTo(hx-s*0.07, hy+s*0.14);
-  ctx.lineTo(hx+s*0.07, hy+s*0.14);
-  ctx.fill();
-
-  // Whiskers
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.7;
-  [[hx-s*0.45,hy+s*0.1,hx-s*0.08,hy+s*0.09],[hx-s*0.45,hy+s*0.16,hx-s*0.08,hy+s*0.14],
-   [hx+s*0.08,hy+s*0.09,hx+s*0.45,hy+s*0.1],[hx+s*0.08,hy+s*0.14,hx+s*0.45,hy+s*0.16]].forEach(([x1,y1,x2,y2])=>{
-    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-  });
-
-  ctx.restore();
-}
-
-// ─── Draw person ──────────────────────────────────────────────
-function drawPerson(cx, cy, skinC, hairC, clothColor, facing, walkFrame, isKenza) {
-  const w=canvas.width, h=canvas.height;
-  const s = h*0.072;
-  const bob = Math.sin(walkFrame*0.22)*s*0.03;
-
-  ctx.save();
-  ctx.translate(cx, cy + bob);
-  if (facing < 0) ctx.scale(-1,1);
-
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.12)';
-  ctx.beginPath(); ctx.ellipse(0, s*0.05, s*0.38, s*0.06, 0, 0, Math.PI*2); ctx.fill();
-
-  // Legs
-  const lswing = Math.sin(walkFrame*0.22)*s*0.22;
-  ctx.fillStyle = isKenza ? '#4858a8' : '#7a6848';
-  ctx.beginPath(); ctx.ellipse(-s*0.12+lswing, s*0.62, s*0.09, s*0.28, lswing*0.02, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(s*0.12-lswing, s*0.62, s*0.09, s*0.28, -lswing*0.02, 0, Math.PI*2); ctx.fill();
-  // Shoes
-  ctx.fillStyle = isKenza ? '#a08060' : '#3a3028';
-  ctx.beginPath(); ctx.ellipse(-s*0.12+lswing, s*0.88, s*0.13, s*0.07, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(s*0.12-lswing, s*0.88, s*0.13, s*0.07, 0, 0, Math.PI*2); ctx.fill();
-
-  // Body
-  ctx.fillStyle = clothColor;
-  ctx.beginPath();
-  ctx.ellipse(0, s*0.28, s*0.28, s*0.38, 0, 0, Math.PI*2); ctx.fill();
-
-  // Arms
-  const aswing = Math.sin(walkFrame*0.22)*s*0.15;
-  ctx.strokeStyle = clothColor; ctx.lineWidth = s*0.18; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(-s*0.22,s*0.08); ctx.lineTo(-s*0.35+aswing,s*0.5); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(s*0.22,s*0.08); ctx.lineTo(s*0.35-aswing,s*0.5); ctx.stroke();
-  // Hands
-  ctx.fillStyle = skinC;
-  ctx.beginPath(); ctx.arc(-s*0.35+aswing, s*0.52, s*0.1, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(s*0.35-aswing, s*0.52, s*0.1, 0, Math.PI*2); ctx.fill();
-
-  // Neck
-  ctx.fillStyle = skinC;
-  ctx.fillRect(-s*0.08, -s*0.12, s*0.16, s*0.14);
-
-  // Head
-  ctx.beginPath(); ctx.ellipse(0, -s*0.32, s*0.24, s*0.28, 0, 0, Math.PI*2); ctx.fill();
-
-  // Hair
-  ctx.fillStyle = hairC;
-  ctx.beginPath();
-  ctx.ellipse(0, -s*0.44, s*0.24, s*0.18, 0, 0, Math.PI*2); ctx.fill();
-  if (isKenza) {
-    // Longer hair
-    ctx.beginPath();
-    ctx.ellipse(-s*0.05, -s*0.14, s*0.15, s*0.32, -0.2, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(s*0.05, -s*0.14, s*0.15, s*0.32, 0.2, 0, Math.PI*2); ctx.fill();
-  }
-
-  // Eyes
-  ctx.fillStyle = '#1a0e06';
-  ctx.beginPath(); ctx.ellipse(-s*0.09, -s*0.34, s*0.04, s*0.05, 0, 0, Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(s*0.09, -s*0.34, s*0.04, s*0.05, 0, 0, Math.PI*2); ctx.fill();
-
-  // Mouth - slight smile
-  ctx.strokeStyle = '#8a4a3a'; ctx.lineWidth = s*0.03;
-  ctx.beginPath(); ctx.arc(0, -s*0.22, s*0.07, 0.2, Math.PI-0.2); ctx.stroke();
-
-  ctx.restore();
-}
-
-// ─── Hug animation ────────────────────────────────────────────
-function drawHug(kx,ky,yx,yy) {
-  const w=canvas.width, h=canvas.height;
-  const cx = (kx+yx)/2;
-  const cy = Math.min(ky,yy);
-  const s = h*0.072;
-
-  // Warm glow
-  if (warmGlow > 0) {
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s*2.5);
-    g.addColorStop(0, `rgba(255,200,80,${warmGlow*0.18})`);
-    g.addColorStop(1, 'rgba(255,200,80,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, s*2.5, 0, Math.PI*2); ctx.fill();
-  }
-
-  drawPerson(kx, ky, pal.skin1, pal.hair1, pal.dress, 1, 0, true);
-  drawPerson(yx, yy, pal.skin2, pal.hair2, pal.shirt, -1, 0, false);
-  // Arms hugging
-  ctx.strokeStyle = pal.dress; ctx.lineWidth = s*0.18; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(kx+s*0.22, ky+s*0.08); ctx.quadraticCurveTo(cx, ky, yx-s*0.22, yy+s*0.08); ctx.stroke();
-  ctx.strokeStyle = pal.shirt;
-  ctx.beginPath(); ctx.moveTo(yx-s*0.22, yy+s*0.08); ctx.quadraticCurveTo(cx, yy, kx+s*0.22, ky+s*0.08); ctx.stroke();
-}
-
-// ─── Main draw loop ───────────────────────────────────────────
-function draw(t) {
-  sceneTime = t * 0.001;
-  const w=canvas.width, h=canvas.height;
-  ctx.clearRect(0,0,w,h);
-
-  drawSky();
-  drawGround();
-  drawTree(w*0.12, h*0.62, 1.1);
-  drawTree(w*0.88, h*0.62, 0.9);
-  drawBench(w*0.28, h*0.66);
-
-  // Ground Y positions
-  const gy = h*0.66;
-
-  // Tonic – near bench, occasionally stands next to kenza
-  const tonicX = (tonicFollowYoussef && walkAway)
-    ? w*0.62 + walkOffset
-    : (showChoices || choiceMade ? w*chars.kenza.x - h*0.05 : w*0.26);
-  const tonicSit = !tonicFollowYoussef || !walkAway;
-  chars.tonic.tailAngle = Math.sin(sceneTime*0.7)*0.35;
-  chars.tonic.blinkT = Math.sin(sceneTime*1.1);
-  drawCat(tonicX, gy, pal.tonicColor, pal.tonicMarkings, 1, tonicSit, chars.tonic.tailAngle, sceneTime*10, chars.tonic.blinkT);
-
-  // Pooki – wandering
-  if (!choiceMade) {
-    chars.pooki.x += chars.pooki.vx * chars.pooki.dir;
-    if (chars.pooki.x > 0.65 || chars.pooki.x < 0.42) {
-      chars.pooki.dir *= -1;
-    }
-  } else if (pookiCircle) {
-    chars.pooki.circleAngle += 0.018;
-    const cx2 = (w*chars.kenza.x + w*chars.youssef.x)/2;
-    chars.pooki.x = (cx2 + Math.cos(chars.pooki.circleAngle)*w*0.07) / w;
-  } else if (pookiStayKenza) {
-    chars.pooki.x = chars.kenza.x + 0.06;
-  }
-  chars.pooki.tailAngle = Math.sin(sceneTime*1.4)*0.5;
-  const pookiWalking = Math.abs(chars.pooki.vx) > 0;
-  drawCat(w*chars.pooki.x, gy, pal.pookiColor, pal.pookiMarkings, chars.pooki.dir, false, chars.pooki.tailAngle, sceneTime*14, 0);
-
-  // Characters
-  const kx = w*chars.kenza.x;
-  const yx = w*chars.youssef.x + walkOffset;
-  const py = gy;
-
-  if (hug) {
-    drawHug(kx, py, yx, py);
-  } else {
-    drawPerson(kx, py, pal.skin1, pal.hair1, pal.dress, 1, chars.kenza.walking ? sceneTime*12 : 0, true);
-    drawPerson(yx, py, pal.skin2, pal.hair2, pal.shirt, -1, 0, false);
-  }
-
-  // Rain
-  if (sceneMode === 'night') {
-    rainOpacity += (rainTarget - rainOpacity)*0.02;
-    spawnRain();
-    ctx.strokeStyle = `rgba(160,180,210,${rainOpacity})`;
-    ctx.lineWidth = 0.8;
-    rainDrops.forEach(d => {
-      d.y += d.vy;
-      if (d.y > h) { d.y = -20; d.x = Math.random()*w; }
-      ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-1,d.y+d.len); ctx.stroke();
-    });
-  }
-
-  // Warm glow post-hug
-  if (sceneMode === 'sunset' && hug) {
-    warmGlow = Math.min(warmGlow + 0.008, 1);
-  }
-
-  requestAnimationFrame(draw);
-}
-requestAnimationFrame(draw);
-
-// ─── Dialogue system ──────────────────────────────────────────
-let dialogueStep = 0;
-let typing = false;
-let typingTimer = null;
-let displayedText = '';
-let showChoices = false;
-let pookiCircle = false;
-let pookiStayKenza = false;
-let tonicFollowYoussef = false;
-
-const speakerEl = document.getElementById('speaker');
-const textEl = document.getElementById('dialogue-text');
-const choicesEl = document.getElementById('choices');
-const hintEl = document.getElementById('tap-hint');
-const statusTag = document.getElementById('status-tag');
-const overlayFade = document.getElementById('overlay-fade');
-
-const script = [
-  { speaker: '', text: 'Kenza walks into the park. The air is quiet, warm. Tonic rests by the bench. Pooki wanders the path…', action: 'kenza_walk' },
-  { speaker: 'YOUSSEF', text: 'Hey… Kenza.', pause: true },
-  { speaker: 'YOUSSEF', text: 'I\'ve been thinking a lot lately… about us.' },
-  { speaker: 'YOUSSEF', text: 'You know… it\'s not just one thing about you.' },
-  { speaker: 'YOUSSEF', text: 'I like the way you talk… the way you tell stories, like every detail matters.' },
-  { speaker: 'YOUSSEF', text: 'And your voice… I don\'t know why, but those late phone calls… they became my favorite part of the day.' },
-  { speaker: 'POOKI', text: '— Pooki wanders between them, pausing the moment —', action: 'pooki_walk', italic: true },
-  { speaker: 'YOUSSEF', text: 'You don\'t even try… but you make everything feel calm.', smile: true },
-  { speaker: 'YOUSSEF', text: 'And the way you think… your maturity… it\'s rare.' },
-  { speaker: 'YOUSSEF', text: 'You see things differently… deeper than most people.' },
-  { speaker: '— Tonic —', text: 'Tonic quietly moves beside Kenza.', italic: true, action: 'tonic_kenza' },
-  { speaker: 'YOUSSEF', text: 'And yeah… I\'d be lying if I said I didn\'t notice how beautiful you are.' },
-  { speaker: 'YOUSSEF', text: 'But it\'s more than that… it\'s who you are.' },
-  { speaker: 'YOUSSEF', text: 'I remember when you said you weren\'t ready for a relationship… and I respected that.' },
-  { speaker: 'YOUSSEF', text: 'But… I kept wondering…' },
-  { speaker: 'YOUSSEF', text: 'Did something change?', action: 'show_choice' },
-];
-
-function typeText(text, cb) {
-  displayedText = '';
-  textEl.textContent = '';
-  typing = true;
-  let i = 0;
-  function step() {
-    if (i < text.length) {
-      displayedText += text[i++];
-      textEl.textContent = displayedText;
-      typingTimer = setTimeout(step, 28);
-    } else {
-      typing = false;
-      if (cb) cb();
-    }
-  }
-  step();
-}
-
-function showLine(idx) {
-  if (idx >= script.length) return;
-  const line = script[idx];
-
-  speakerEl.style.opacity = line.speaker ? '1' : '0';
-  speakerEl.textContent = line.speaker;
-  hintEl.style.opacity = '1';
-
-  if (line.italic) {
-    textEl.style.fontStyle = 'italic';
-    textEl.style.color = 'rgba(240,220,160,0.75)';
-  } else {
-    textEl.style.fontStyle = 'normal';
-    textEl.style.color = '#f0ead8';
-  }
-
-  if (line.action === 'kenza_walk') {
-    chars.kenza.walking = true;
-    setTimeout(()=>{ chars.kenza.walking = false; }, 1200);
-  }
-  if (line.action === 'tonic_kenza') {
-    // Tonic moves near kenza – handled in draw loop via condition
-  }
-  if (line.action === 'show_choice') {
-    typeText(line.text, () => {
-      choicesEl.style.display = 'flex';
-      hintEl.style.opacity = '0';
-      showChoices = true;
-    });
-    return;
-  }
-
-  typeText(line.text);
-}
-
-function advance() {
-  if (typing) {
-    // Skip typing
-    clearTimeout(typingTimer);
-    textEl.textContent = script[dialogueStep].text;
-    typing = false;
-    return;
-  }
-  if (showChoices || endingPlayed) return;
-  dialogueStep++;
-  if (dialogueStep < script.length) {
-    showLine(dialogueStep);
-  }
-}
-
-document.getElementById('dialogue-box').addEventListener('click', advance);
-showLine(0);
-
-// ─── Choice handler ───────────────────────────────────────────
-function choose(val) {
-  choicesEl.style.display = 'none';
-  showChoices = false;
-  choiceMade = true;
-
-  if (val === 'yes') {
-    playYesEnding();
-  } else {
-    playNoEnding();
-  }
-}
-
-function setStatus(txt) {
-  document.getElementById('status-tag').textContent = txt;
-}
-
-function playYesEnding() {
-  sceneMode = 'sunset';
-  setStatus('Park — Sunset');
-  const yesScript = [
-    { speaker: 'KENZA', text: '…Yes. Maybe I was just scared before.' },
-    { speaker: 'YOUSSEF', text: 'I didn\'t want to push you… but I\'m really glad to hear that.' },
-    { speaker: 'YOUSSEF', text: 'I meant everything I said.' },
-    { speaker: '— Pooki —', text: 'Pooki begins circling them playfully.', italic: true, action: 'pooki_circle' },
-    { speaker: 'YOUSSEF', text: 'Can I…?' },
-    { speaker: '— Kenza nods —', text: 'She nods softly. A small smile.', italic: true, action: 'hug' },
-    { speaker: '', text: '♡', italic: true, action: 'fade_end_yes' },
-  ];
-  runEnding(yesScript);
-}
-
-function playNoEnding() {
-  sceneMode = 'night';
-  rainTarget = 0.7;
-  setStatus('Park — Night');
-  const noScript = [
-    { speaker: 'KENZA', text: 'I\'m sorry… I\'m still not ready.' },
-    { speaker: '', text: '…', italic: true },
-    { speaker: 'YOUSSEF', text: '…Yeah. I understand.' },
-    { speaker: 'YOUSSEF', text: 'You deserve to take your time.' },
-    { speaker: 'YOUSSEF', text: 'Take care, Kenza.', action: 'youssef_walk' },
-    { speaker: '— Tonic —', text: 'Tonic stands and quietly follows Youssef.', italic: true, action: 'tonic_follow' },
-    { speaker: '— Pooki —', text: 'Pooki stays near Kenza. The rain continues.', italic: true, action: 'pooki_stay' },
-    { speaker: '', text: '…', italic: true, action: 'fade_end_no' },
-  ];
-  runEnding(noScript);
-}
-
-let endIdx = 0;
-let endScript = [];
-
-function runEnding(es) {
-  endScript = es;
-  endIdx = 0;
-  endingPlayed = true;
-  showEndLine(0);
-  document.getElementById('dialogue-box').addEventListener('click', advanceEnding);
-}
-
-function showEndLine(idx) {
-  if (idx >= endScript.length) return;
-  const line = endScript[idx];
-
-  speakerEl.style.opacity = line.speaker ? '1' : '0';
-  speakerEl.textContent = line.speaker;
-  hintEl.style.opacity = '1';
-
-  if (line.italic) {
-    textEl.style.fontStyle = 'italic';
-    textEl.style.color = 'rgba(240,220,160,0.75)';
-  } else {
-    textEl.style.fontStyle = 'normal';
-    textEl.style.color = '#f0ead8';
-  }
-
-  if (line.action === 'pooki_circle') pookiCircle = true;
-  if (line.action === 'hug') hug = true;
-  if (line.action === 'youssef_walk') {
-    let wi = 0;
-    const go = setInterval(()=>{ walkOffset += 2.2; wi++; if(wi>80) clearInterval(go); },30);
-  }
-  if (line.action === 'tonic_follow') tonicFollowYoussef = true;
-  if (line.action === 'pooki_stay') pookiStayKenza = true;
-  if (line.action === 'fade_end_yes' || line.action === 'fade_end_no') {
-    setTimeout(()=>{
-      overlayFade.style.opacity = '1';
-      hintEl.style.opacity = '0';
-      speakerEl.style.opacity = '0';
-      textEl.textContent = '';
-    }, 900);
-    return;
-  }
-
-  typeText(line.text);
-}
-
-function advanceEnding() {
-  if (typing) {
-    clearTimeout(typingTimer);
-    textEl.textContent = endScript[endIdx].text;
-    typing = false;
-    return;
-  }
-  endIdx++;
-  if (endIdx < endScript.length) {
-    showEndLine(endIdx);
-  }
-}
-</script>
+
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI -->
+    <div id="uiLayer">
+        <div id="instruction">Use joystick to move. Approach Youssef or the cats.</div>
+        
+        <div id="joystickZone">
+            <div id="joystickBase">
+                <div id="joystickStick"></div>
+            </div>
+        </div>
+
+        <div id="actionButton">TALK</div>
+
+        <div id="dialogueContainer">
+            <div id="speakerName">Youssef</div>
+            <div id="dialogueText">...</div>
+            <div id="continueIndicator">Tap Action to continue ▼</div>
+        </div>
+
+        <div id="choiceContainer">
+            <button class="choiceBtn" id="btnYes">YES</button>
+            <button class="choiceBtn" id="btnNo">NO</button>
+        </div>
+    </div>
+    
+    <div id="fadeOverlay"></div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- AUDIO SYSTEM (Procedural Web Audio) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playBlip() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400 + Math.random() * 200, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        let rainNoiseNode, rainGain;
+        function startRainSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            rainNoiseNode = audioCtx.createBufferSource();
+            rainNoiseNode.buffer = buffer;
+            rainNoiseNode.loop = true;
+            
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 1000;
+
+            rainGain = audioCtx.createGain();
+            rainGain.gain.setValueAtTime(0, audioCtx.currentTime);
+            rainGain.gain.linearRampToValueAtTime(0.2, audioCtx.currentTime + 3);
+
+            rainNoiseNode.connect(filter);
+            filter.connect(rainGain);
+            rainGain.connect(audioCtx.destination);
+            rainNoiseNode.start();
+        }
+
+        // --- GAME ENGINE SETUP ---
+        const canvas = document.getElementById('gameCanvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        const scene = new THREE.Scene();
+        // Initial Day Color
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.03);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 50;
+        dirLight.shadow.camera.left = -15;
+        dirLight.shadow.camera.right = 15;
+        dirLight.shadow.camera.top = 15;
+        dirLight.shadow.camera.bottom = -15;
+        scene.add(dirLight);
+
+        // --- WORLD GENERATION ---
+        // Ground
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a7c59, roughness: 0.8 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Path
+        const pathGeo = new THREE.PlaneGeometry(6, 40);
+        const pathMat = new THREE.MeshStandardMaterial({ color: 0xc2b280, roughness: 0.9 });
+        const path = new THREE.Mesh(pathGeo, pathMat);
+        path.rotation.x = -Math.PI / 2;
+        path.position.set(0, 0.01, 0);
+        path.receiveShadow = true;
+        scene.add(path);
+
+        // Utility to create stylized trees
+        function createTree(x, z) {
+            const tree = new THREE.Group();
+            // Trunk
+            const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 2, 8);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.y = 1;
+            trunk.castShadow = true;
+            tree.add(trunk);
+            // Leaves
+            const leavesGeo = new THREE.DodecahedronGeometry(1.5);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, flatShading: true });
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.y = 2.5;
+            leaves.castShadow = true;
+            tree.add(leaves);
+            
+            tree.position.set(x, 0, z);
+            scene.add(tree);
+        }
+
+        // Utility to create a park bench
+        function createBench(x, z, rotation) {
+            const bench = new THREE.Group();
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            
+            const seat = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 0.8), woodMat);
+            seat.position.y = 0.5;
+            seat.castShadow = true;
+            bench.add(seat);
+            
+            const back = new THREE.Mesh(new THREE.BoxGeometry(2, 0.6, 0.1), woodMat);
+            back.position.set(0, 0.9, -0.35);
+            back.castShadow = true;
+            bench.add(back);
+
+            const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.8), metalMat);
+            leg1.position.set(-0.9, 0.25, 0);
+            bench.add(leg1);
+
+            const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.8), metalMat);
+            leg2.position.set(0.9, 0.25, 0);
+            bench.add(leg2);
+
+            bench.position.set(x, 0, z);
+            bench.rotation.y = rotation;
+            scene.add(bench);
+        }
+
+        // Utility to create a lamp post
+        function createLamp(x, z) {
+            const lamp = new THREE.Group();
+            const poleGeo = new THREE.CylinderGeometry(0.05, 0.1, 4, 8);
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.y = 2;
+            lamp.add(pole);
+
+            const bulbGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffdd88 });
+            const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+            bulb.position.y = 4;
+            lamp.add(bulb);
+
+            const pointLight = new THREE.PointLight(0xffaa00, 0, 10); // Initially off/weak
+            pointLight.position.y = 4;
+            lamp.add(pointLight);
+            
+            lamp.userData.light = pointLight; // Store reference
+
+            lamp.position.set(x, 0, z);
+            scene.add(lamp);
+            return lamp;
+        }
+
+        // Populate Environment
+        const lamps = [];
+        for (let i = 0; i < 10; i++) {
+            createTree(Math.random() * 20 + 5, Math.random() * 40 - 20);
+            createTree(Math.random() * -20 - 5, Math.random() * 40 - 20);
+        }
+        createBench(-4, 5, Math.PI / 2);
+        createBench(-4, -5, Math.PI / 2);
+        lamps.push(createLamp(-4, 0));
+        lamps.push(createLamp(4, 0));
+
+
+        // --- CHARACTER CREATION (Realistic Articulated Hierarchy) ---
+        function createCharacter(skinColor, topColor, bottomColor, isKenza) {
+            const char = new THREE.Group();
+            
+            const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.4 });
+            const topMat = new THREE.MeshStandardMaterial({ color: topColor, roughness: 0.8 });
+            const bottomMat = new THREE.MeshStandardMaterial({ color: bottomColor, roughness: 0.9 });
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+
+            // Base scale based on character height
+            const scale = isKenza ? 0.95 : 1.05;
+            char.scale.set(scale, scale, scale);
+
+            // Hips (Root Joint)
+            const hips = new THREE.Group();
+            hips.position.y = 1.0; 
+            char.add(hips);
+
+            // Pelvis
+            const pelvisGeo = new THREE.CylinderGeometry(0.18, 0.2, 0.25, 16);
+            const pelvis = new THREE.Mesh(pelvisGeo, bottomMat);
+            pelvis.castShadow = true;
+            hips.add(pelvis);
+
+            // Torso
+            const torsoGeo = new THREE.CylinderGeometry(0.22, 0.18, 0.5, 16);
+            const torso = new THREE.Mesh(torsoGeo, topMat);
+            torso.position.y = 0.35;
+            torso.castShadow = true;
+            hips.add(torso);
+
+            // Neck
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.15, 16), skinMat);
+            neck.position.y = 0.65;
+            hips.add(neck);
+
+            // Head Group
+            const headGroup = new THREE.Group();
+            headGroup.position.y = 0.8;
+            hips.add(headGroup);
+            
+            // Skull
+            const headGeo = new THREE.SphereGeometry(0.13, 32, 32);
+            const head = new THREE.Mesh(headGeo, skinMat);
+            head.scale.set(1, 1.25, 1.1); // Make it naturally oval
+            head.castShadow = true;
+            headGroup.add(head);
+
+            // --- LEGS ---
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.06, 0.45, 16);
+            const calfGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.45, 16);
+            
+            // Left Leg Pivot
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(-0.12, -0.1, 0);
+            hips.add(leftLeg);
+            const lThigh = new THREE.Mesh(legGeo, bottomMat);
+            lThigh.position.y = -0.225; // Shift down so it pivots at top
+            lThigh.castShadow = true;
+            leftLeg.add(lThigh);
+            const lCalf = new THREE.Mesh(calfGeo, bottomMat); // Pants
+            lCalf.position.y = -0.675;
+            lCalf.castShadow = true;
+            leftLeg.add(lCalf);
+            const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), shoeMat);
+            lShoe.position.set(0, -0.95, 0.05);
+            lShoe.castShadow = true;
+            leftLeg.add(lShoe);
+
+            // Right Leg Pivot
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0.12, -0.1, 0);
+            hips.add(rightLeg);
+            const rThigh = new THREE.Mesh(legGeo, bottomMat);
+            rThigh.position.y = -0.225;
+            rThigh.castShadow = true;
+            rightLeg.add(rThigh);
+            const rCalf = new THREE.Mesh(calfGeo, bottomMat);
+            rCalf.position.y = -0.675;
+            rCalf.castShadow = true;
+            rightLeg.add(rCalf);
+            const rShoe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), shoeMat);
+            rShoe.position.set(0, -0.95, 0.05);
+            rShoe.castShadow = true;
+            rightLeg.add(rShoe);
+
+            // --- ARMS ---
+            const upperArmGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.35, 16);
+            const lowerArmGeo = new THREE.CylinderGeometry(0.05, 0.04, 0.35, 16);
+            
+            // Left Arm Pivot
+            const leftArm = new THREE.Group();
+            leftArm.position.set(-0.25, 0.5, 0);
+            leftArm.rotation.z = 0.15; // Natural relaxed angle
+            hips.add(leftArm);
+            const lUpperArm = new THREE.Mesh(upperArmGeo, topMat);
+            lUpperArm.position.y = -0.175;
+            lUpperArm.castShadow = true;
+            leftArm.add(lUpperArm);
+            const lLowerArm = new THREE.Mesh(lowerArmGeo, skinMat); // Exposed skin
+            lLowerArm.position.set(0, -0.5, 0.05);
+            lLowerArm.rotation.x = -0.1; // slight elbow bend
+            lLowerArm.castShadow = true;
+            leftArm.add(lLowerArm);
+            const lHand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), skinMat);
+            lHand.position.set(0, -0.7, 0.05);
+            lHand.castShadow = true;
+            leftArm.add(lHand);
+
+            // Right Arm Pivot
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0.25, 0.5, 0);
+            rightArm.rotation.z = -0.15;
+            hips.add(rightArm);
+            const rUpperArm = new THREE.Mesh(upperArmGeo, topMat);
+            rUpperArm.position.y = -0.175;
+            rUpperArm.castShadow = true;
+            rightArm.add(rUpperArm);
+            const rLowerArm = new THREE.Mesh(lowerArmGeo, skinMat);
+            rLowerArm.position.set(0, -0.5, 0.05);
+            rLowerArm.rotation.x = -0.1;
+            rLowerArm.castShadow = true;
+            rightArm.add(rLowerArm);
+            const rHand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), skinMat);
+            rHand.position.set(0, -0.7, 0.05);
+            rHand.castShadow = true;
+            rightArm.add(rHand);
+
+            // --- DETAILS (Face & Hair) ---
+            if (isKenza) {
+                // Wolf cut hair (Layered)
+                const hairMat = new THREE.MeshStandardMaterial({ color: 0x1a1110, roughness: 1 });
+                const hairBase = new THREE.Mesh(new THREE.SphereGeometry(0.145, 325, 32), hairMat);
+                hairBase.position.y = 0.02;
+                headGroup.add(hairBase);
+                
+                const hairFlap1 = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.26, 0.19), hairMat);
+                hairFlap1.position.set(0, -0.05, -0.05);
+                headGroup.add(hairFlap1);
+                
+                const hairFlap2 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.1), hairMat);
+                hairFlap2.position.set(0, -0.15, -0.08);
+                headGroup.add(hairFlap2);
+                
+                const bangs = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.1, 0.1), hairMat);
+                bangs.position.set(0, 0.1, 0.1);
+                bangs.rotation.x = 0.2;
+                headGroup.add(bangs);
+
+                // Lipstick/Lips
+                const lipMat = new THREE.MeshStandardMaterial({ color: 0x8b0000 });
+                const lips = new THREE.Mesh(new THREE.SphereGeometry(0.03, 16, 16), lipMat);
+                lips.scale.set(1.5, 0.5, 0.5);
+                lips.position.set(0, -0.05, 0.13);
+                headGroup.add(lips);
+                
+                // Nose
+                const nose = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 16), skinMat);
+                nose.position.set(0, 0.01, 0.14);
+                headGroup.add(nose);
+            } else {
+                // Youssef: Curly hair (Structured layers)
+                const hairMat = new THREE.MeshStandardMaterial({ color: 0x2b1d14, roughness: 1 });
+                
+                // Base layer to cover scalp
+                const base = new THREE.Mesh(new THREE.SphereGeometry(0.140, 33, 33), hairMat);
+                base.position.y = 0.01;
+                headGroup.add(base);
+
+                // Curly layers
+                for (let r = 0; r <= 4; r++) { // Layers from top down
+                    let ringCount = r === 0 ? 1 : r * 8; // More curls further out
+                    for (let i = 0; i < ringCount; i++) {
+                        const curlSize = 0.03 + Math.random() * 0.04;
+                        const curl = new THREE.Mesh(new THREE.SphereGeometry(curlSize, 14, 14), hairMat);
+                        const angle = (i / ringCount) * Math.PI * 2;
+                        // Radius increases as we go down layers
+                        const radius = r * 0.035;
+                        // Height decreases as we go down layers, with some random variance
+                        const h = 0.14 - (r * 0.02) + (Math.random() * 0.02 - 0.01);
+                        
+                        curl.position.set(
+                            Math.cos(angle) * radius, 
+                            h, 
+                            Math.sin(angle) * radius
+                        );
+                        // Slight random offset for natural look
+                        curl.position.x += (Math.random()-0.5)*0.02;
+                        curl.position.z += (Math.random()-0.5)*0.02;
+                        
+                        headGroup.add(curl);
+                    }
+                }
+
+                // Glasses
+                const glassMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
+                const ringGeo = new THREE.TorusGeometry(0.04, 0.005, 8, 16);
+                const leftGlass = new THREE.Mesh(ringGeo, glassMat);
+                leftGlass.position.set(-0.04, 0.05, 0.13);
+                headGroup.add(leftGlass);
+                const rightGlass = new THREE.Mesh(ringGeo, glassMat);
+                rightGlass.position.set(0.04, 0.05, 0.13);
+                headGroup.add(rightGlass);
+                const bridge = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.04), glassMat);
+                bridge.rotation.z = Math.PI / 2;
+                bridge.position.set(0, 0.05, 0.13);
+                headGroup.add(bridge);
+                
+                // Nose
+                const nose = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 16), skinMat);
+                nose.position.set(0, 0.01, 0.14);
+                headGroup.add(nose);
+            }
+
+            // Store references for dynamic walking/breathing animation
+            char.userData = {
+                leftLeg: leftLeg,
+                rightLeg: rightLeg,
+                leftArm: leftArm,
+                rightArm: rightArm,
+                hips: hips
+            };
+
+            return char;
+        }
+
+        // Create Kenza (Player) - Moroccan skin tone, dark red shirt, dark pants
+        const player = createCharacter(0xd2b48c, 0x8b0000, 0x111111, true); 
+        player.position.set(0, 0, 15);
+        scene.add(player);
+
+        // Create Youssef (NPC) - Lighter skin, Navy blue shirt, denim pants
+        const youssef = createCharacter(0xf1c27d, 0x2c3e50, 0x3b5998, false); 
+        youssef.position.set(0, 0, -8);
+        youssef.rotation.y = 0;
+        scene.add(youssef);
+
+        // Create Realistic Cats
+        function createCat(color, isManx) {
+            const cat = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.8 });
+
+            // Torso
+            const bodyGeo = new THREE.SphereGeometry(0.15, 16, 16);
+            const body = new THREE.Mesh(bodyGeo, mat);
+            body.scale.set(1, 0.8, 1.5); // Stretch along Z axis
+            body.position.y = 0.15;
+            body.castShadow = true;
+            cat.add(body);
+
+            // Head Group
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, 0.25, 0.2);
+            cat.add(headGroup);
+
+            // Head sphere
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), mat);
+            head.castShadow = true;
+            headGroup.add(head);
+
+            // Ears
+            const earGeo = new THREE.ConeGeometry(0.03, 0.06, 8);
+            const lEar = new THREE.Mesh(earGeo, mat);
+            lEar.position.set(-0.05, 0.08, 0);
+            lEar.rotation.z = 0.2;
+            headGroup.add(lEar);
+            const rEar = new THREE.Mesh(earGeo, mat);
+            rEar.position.set(0.05, 0.08, 0);
+            rEar.rotation.z = -0.2;
+            headGroup.add(rEar);
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.03, 0.02, 0.15, 8);
+            const legPositions = [
+                [-0.08, 0.075, 0.1], [0.08, 0.075, 0.1], // Front
+                [-0.08, 0.075, -0.15], [0.08, 0.075, -0.15] // Back
+            ];
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, mat);
+                leg.position.set(...pos);
+                leg.castShadow = true;
+                cat.add(leg);
+            });
+
+            // Tail
+            if (!isManx) {
+                // Long tail for Tonic
+                const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.015, 0.3, 8), mat);
+                tail.position.set(0, 0.2, -0.25);
+                tail.rotation.x = Math.PI / 4; // Pointing slightly up and back
+                tail.castShadow = true;
+                cat.add(tail);
+                cat.userData.tail = tail; // Store reference if needed later
+            } else {
+                // Stub for Pooki (Manx)
+                const stub = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), mat);
+                stub.position.set(0, 0.2, -0.25);
+                stub.castShadow = true;
+                cat.add(stub);
+            }
+
+            return cat;
+        }
+
+        const tonic = createCat(0x888888, false); // Scottish Straight (Grey, long tail)
+        tonic.position.set(-2, 0, -7);
+        scene.add(tonic);
+
+        const pooki = createCat(0xd2691e, true); // Manx (Orange/Brown, stub tail)
+        pooki.position.set(2, 0, 10);
+        scene.add(pooki);
+
+
+        // --- RAIN EFFECT (Initially hidden) ---
+        const rainGeo = new THREE.BufferGeometry();
+        const rainCount = 2000;
+        const rainPos = new Float32Array(rainCount * 3);
+        for(let i=0; i<rainCount*3; i+=3) {
+            rainPos[i] = Math.random() * 40 - 20;
+            rainPos[i+1] = Math.random() * 20;
+            rainPos[i+2] = Math.random() * 40 - 20;
+        }
+        rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+        const rainMat = new THREE.PointsMaterial({
+            color: 0xaaaaaa,
+            size: 0.1,
+            transparent: true,
+            opacity: 0.6
+        });
+        const rainSystem = new THREE.Points(rainGeo, rainMat);
+        rainSystem.visible = false;
+        scene.add(rainSystem);
+
+
+        // --- CONTROLS & LOGIC ---
+        let moveState = { active: false, x: 0, y: 0 };
+        const joystickBase = document.getElementById('joystickBase');
+        const joystickStick = document.getElementById('joystickStick');
+        const actionBtn = document.getElementById('actionButton');
+        const joystickZone = document.getElementById('joystickZone');
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+
+        let maxJoystickRadius = 35;
+
+        joystickZone.addEventListener('touchstart', handleJoystickStart, {passive: false});
+        joystickZone.addEventListener('touchmove', handleJoystickMove, {passive: false});
+        joystickZone.addEventListener('touchend', handleJoystickEnd, {passive: false});
+        // Mouse fallbacks for testing on desktop
+        joystickZone.addEventListener('mousedown', (e) => { moveState.active = true; handleJoystickMove(e); });
+        window.addEventListener('mousemove', (e) => { if(moveState.active) handleJoystickMove(e); });
+        window.addEventListener('mouseup', handleJoystickEnd);
+
+        function handleJoystickStart(e) {
+            e.preventDefault();
+            moveState.active = true;
+            handleJoystickMove(e);
+        }
+
+        function handleJoystickMove(e) {
+            if (!moveState.active) return;
+            e.preventDefault();
+            
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            const rect = joystickBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            let deltaX = clientX - centerX;
+            let deltaY = clientY - centerY;
+            
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            if (distance > maxJoystickRadius) {
+                const ratio = maxJoystickRadius / distance;
+                deltaX *= ratio;
+                deltaY *= ratio;
+            }
+            
+            joystickStick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            
+            moveState.x = deltaX / maxJoystickRadius;
+            moveState.y = deltaY / maxJoystickRadius;
+        }
+
+        function handleJoystickEnd(e) {
+            if(e) e.preventDefault();
+            moveState.active = false;
+            moveState.x = 0;
+            moveState.y = 0;
+            joystickStick.style.transform = `translate(0px, 0px)`;
+        }
+
+        // --- GAME STATE ---
+        const GameState = { EXPLORE: 0, DIALOGUE: 1, CHOICE: 2, ENDING_YES: 3, ENDING_NO: 4 };
+        let currentState = GameState.EXPLORE;
+        let currentTarget = null; // What we are interacting with
+
+        // Dialogue Script
+        const dialogueLines = [
+            "Hey Kenza...",
+            "I... I really love our late phone calls.",
+            "Your voice, the way you tell stories... your attention to detail.",
+            "I admire your maturity and your mindset so much.",
+            "You're beautiful, yes, but it's your personality that got me.",
+            "I know you said before you weren't ready for a relationship...",
+            "But... did something change?"
+        ];
+        let currentLineIdx = 0;
+
+        const dialogueContainer = document.getElementById('dialogueContainer');
+        const dialogueText = document.getElementById('dialogueText');
+        const speakerName = document.getElementById('speakerName');
+        const choiceContainer = document.getElementById('choiceContainer');
+        const uiLayer = document.getElementById('uiLayer');
+        const instruction = document.getElementById('instruction');
+
+        startBtn.addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            // Init audio context on user gesture
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        });
+
+        actionBtn.addEventListener('touchstart', handleAction, {passive: false});
+        actionBtn.addEventListener('mousedown', handleAction);
+
+        function handleAction(e) {
+            e.preventDefault();
+            if (currentState === GameState.EXPLORE && currentTarget) {
+                if (currentTarget === youssef) {
+                    startDialogue();
+                } else if (currentTarget === tonic || currentTarget === pooki) {
+                    petCat(currentTarget);
+                }
+            } else if (currentState === GameState.DIALOGUE) {
+                advanceDialogue();
+            }
+        }
+
+        function petCat(cat) {
+            playBlip();
+            // Simple pet animation logic
+            const originalY = cat.position.y;
+            cat.position.y = originalY - 0.05; // crouch slightly
+            setTimeout(() => { cat.position.y = originalY; }, 200);
+            
+            speakerName.innerText = "Kenza";
+            speakerName.style.color = "#e94560";
+            dialogueText.innerText = "*Pets the soft cat*";
+            dialogueContainer.style.display = 'block';
+            actionBtn.style.display = 'none';
+            joystickZone.style.display = 'none';
+            currentState = GameState.DIALOGUE;
+            
+            // Auto close after pet
+            setTimeout(() => {
+                if(currentState === GameState.DIALOGUE) {
+                    dialogueContainer.style.display = 'none';
+                    actionBtn.style.display = 'flex';
+                    joystickZone.style.display = 'block';
+                    currentState = GameState.EXPLORE;
+                }
+            }, 1500);
+        }
+
+        function startDialogue() {
+            instruction.style.display = 'none';
+            currentState = GameState.DIALOGUE;
+            joystickZone.style.display = 'none';
+            actionBtn.innerText = "NEXT";
+            
+            // Make them face each other
+            player.lookAt(youssef.position);
+            youssef.lookAt(player.position);
+
+            dialogueContainer.style.display = 'block';
+            currentLineIdx = 0;
+            speakerName.innerText = "Youssef";
+            speakerName.style.color = "#3498db";
+            showText(dialogueLines[currentLineIdx]);
+        }
+
+        function advanceDialogue() {
+            if (currentLineIdx < dialogueLines.length - 1) {
+                currentLineIdx++;
+                showText(dialogueLines[currentLineIdx]);
+            } else {
+                // Show Choices
+                currentState = GameState.CHOICE;
+                dialogueContainer.style.display = 'none';
+                actionBtn.style.display = 'none';
+                choiceContainer.style.display = 'flex';
+            }
+        }
+
+        function showText(text) {
+            dialogueText.innerText = text;
+            playBlip();
+        }
+
+        // Choices Logic
+        document.getElementById('btnYes').addEventListener('click', () => triggerEnding(true));
+        document.getElementById('btnNo').addEventListener('click', () => triggerEnding(false));
+        document.getElementById('btnYes').addEventListener('touchstart', (e) => { e.preventDefault(); triggerEnding(true); });
+        document.getElementById('btnNo').addEventListener('touchstart', (e) => { e.preventDefault(); triggerEnding(false); });
+
+        // Target state variables for smooth transitions
+        let targetBgColor = new THREE.Color(0x87CEEB);
+        let targetFogColor = new THREE.Color(0x87CEEB);
+        let targetLightColor = new THREE.Color(0xffffff);
+        let targetAmbientInt = 0.6;
+        let targetLampIntensity = 0;
+        let endingPhase = 0;
+
+        function triggerEnding(isYes) {
+            choiceContainer.style.display = 'none';
+            if (isYes) {
+                currentState = GameState.ENDING_YES;
+                // Sunset Setup
+                targetBgColor.setHex(0xff7e5f);
+                targetFogColor.setHex(0xff7e5f);
+                targetLightColor.setHex(0xfeb47b);
+                targetAmbientInt = 0.8;
+                targetLampIntensity = 0;
+                
+                // Show final dialogue
+                setTimeout(() => {
+                    dialogueContainer.style.display = 'block';
+                    speakerName.innerText = "Kenza";
+                    speakerName.style.color = "#e94560";
+                    dialogueText.innerText = "Yes... everything changed.";
+                    document.getElementById('continueIndicator').style.display = 'none';
+                }, 1000);
+
+            } else {
+                currentState = GameState.ENDING_NO;
+                // Night Setup
+                targetBgColor.setHex(0x0f2027);
+                targetFogColor.setHex(0x0f2027);
+                targetLightColor.setHex(0x203a43);
+                targetAmbientInt = 0.2;
+                targetLampIntensity = 1; // Turn on lamps
+                
+                rainSystem.visible = true;
+                startRainSound();
+
+                setTimeout(() => {
+                    dialogueContainer.style.display = 'block';
+                    speakerName.innerText = "Kenza";
+                    speakerName.style.color = "#e94560";
+                    dialogueText.innerText = "I'm sorry Youssef... I'm still not ready.";
+                    document.getElementById('continueIndicator').style.display = 'none';
+                }, 1000);
+            }
+            
+            // Final fade out after 8 seconds
+            setTimeout(() => {
+                dialogueContainer.style.display = 'none';
+                document.getElementById('fadeOverlay').style.opacity = 1;
+            }, 8000);
+        }
+
+        // --- MAIN RENDER LOOP ---
+        const clock = new THREE.Clock();
+        const playerSpeed = 4;
+        
+        // Character Animation variables
+        let walkTime = 0;
+        
+        // Pooki random movement
+        let pookiTarget = new THREE.Vector3(pooki.position.x, 0, pooki.position.z);
+        let pookiTimer = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // 1. Logic based on state
+            if (currentState === GameState.EXPLORE) {
+                // Player Movement
+                if (moveState.active) {
+                    const moveX = moveState.x;
+                    const moveZ = moveState.y;
+
+                    // Calculate direction relative to camera
+                    const moveVector = new THREE.Vector3(moveX, 0, moveZ);
+                    
+                    // Simple collision/boundary (keep within ground)
+                    let nextX = player.position.x + moveVector.x * playerSpeed * delta;
+                    let nextZ = player.position.z + moveVector.z * playerSpeed * delta;
+                    
+                    if (nextX > -45 && nextX < 45) player.position.x = nextX;
+                    if (nextZ > -45 && nextZ < 45) player.position.z = nextZ;
+
+                    // Rotation
+                    if (moveVector.lengthSq() > 0.01) {
+                        const targetAngle = Math.atan2(moveVector.x, moveVector.z);
+                        // Simple rotation lerp
+                        let diff = targetAngle - player.rotation.y;
+                        while(diff < -Math.PI) diff += Math.PI * 2;
+                        while(diff > Math.PI) diff -= Math.PI * 2;
+                        player.rotation.y += diff * 10 * delta;
+                    }
+
+                    // Walk Animation
+                    walkTime += delta * 15;
+                    player.userData.leftLeg.rotation.x = Math.sin(walkTime) * 0.6;
+                    player.userData.rightLeg.rotation.x = Math.sin(walkTime + Math.PI) * 0.6;
+                    player.userData.leftArm.rotation.x = Math.sin(walkTime + Math.PI) * 0.4;
+                    player.userData.rightArm.rotation.x = Math.sin(walkTime) * 0.4;
+                    player.userData.hips.position.y = 1.0 + Math.abs(Math.sin(walkTime)) * 0.05;
+                } else {
+                    // Smooth transition to idle
+                    player.userData.leftLeg.rotation.x = THREE.MathUtils.lerp(player.userData.leftLeg.rotation.x, 0, delta * 10);
+                    player.userData.rightLeg.rotation.x = THREE.MathUtils.lerp(player.userData.rightLeg.rotation.x, 0, delta * 10);
+                    player.userData.hips.position.y = THREE.MathUtils.lerp(player.userData.hips.position.y, 1.0, delta * 10);
+                    // Idle breathing/arm movement
+                    player.userData.leftArm.rotation.x = Math.sin(time * 2) * 0.05 + 0.1;
+                    player.userData.rightArm.rotation.x = Math.sin(time * 2 + Math.PI) * 0.05 + 0.1;
+                }
+
+                // Youssef Idle Breathing
+                youssef.userData.leftArm.rotation.x = Math.sin(time * 1.5) * 0.05 + 0.1;
+                youssef.userData.rightArm.rotation.x = Math.sin(time * 1.5 + Math.PI) * 0.05 + 0.1;
+                youssef.userData.hips.position.y = 1.0 + Math.sin(time * 3) * 0.01;
+
+
+                // Interaction Detection
+                const distToYoussef = player.position.distanceTo(youssef.position);
+                const distToTonic = player.position.distanceTo(tonic.position);
+                const distToPooki = player.position.distanceTo(pooki.position);
+
+                currentTarget = null;
+                if (distToYoussef < 2.5) {
+                    currentTarget = youssef;
+                    actionBtn.innerText = "TALK";
+                } else if (distToTonic < 2) {
+                    currentTarget = tonic;
+                    actionBtn.innerText = "PET";
+                } else if (distToPooki < 2) {
+                    currentTarget = pooki;
+                    actionBtn.innerText = "PET";
+                }
+
+                if (currentTarget) {
+                    actionBtn.style.display = 'flex';
+                } else {
+                    actionBtn.style.display = 'none';
+                }
+
+                // Cat Idles
+                // Tonic stays near Youssef, slowly looking around
+                tonic.rotation.y += Math.sin(time) * 0.005;
+
+                // Pooki moves randomly near spawn
+                pookiTimer -= delta;
+                if (pookiTimer <= 0) {
+                    pookiTarget.set(2 + (Math.random()*4-2), 0, 10 + (Math.random()*4-2));
+                    pookiTimer = 2 + Math.random() * 3;
+                }
+                pooki.position.lerp(pookiTarget, 0.02);
+                pooki.lookAt(pookiTarget);
+
+                // Camera follow player
+                const idealCameraPos = new THREE.Vector3(
+                    player.position.x, 
+                    player.position.y + 3, 
+                    player.position.z + 5
+                );
+                camera.position.lerp(idealCameraPos, 0.1);
+                camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
+            } else {
+                
+                // During Cinematic States (Reset Kenza's limbs if not walking)
+                if (currentState === GameState.ENDING_YES) {
+                    endingPhase += delta;
+                    const walkCloserTime = time * 8;
+                    const dir = new THREE.Vector3().subVectors(youssef.position, player.position).normalize();
+                    
+                    if (player.position.distanceTo(youssef.position) > 1.2) {
+                        // They walk closer
+                        player.position.addScaledVector(dir, delta * 0.5);
+                        youssef.position.addScaledVector(dir, -delta * 0.5);
+                        
+                        player.userData.leftLeg.rotation.x = Math.sin(walkCloserTime) * 0.3;
+                        player.userData.rightLeg.rotation.x = Math.sin(walkCloserTime + Math.PI) * 0.3;
+                        youssef.userData.leftLeg.rotation.x = Math.sin(walkCloserTime + Math.PI) * 0.3;
+                        youssef.userData.rightLeg.rotation.x = Math.sin(walkCloserTime) * 0.3;
+                    } else {
+                        // Stop moving
+                        player.userData.leftLeg.rotation.x = THREE.MathUtils.lerp(player.userData.leftLeg.rotation.x, 0, delta * 5);
+                        player.userData.rightLeg.rotation.x = THREE.MathUtils.lerp(player.userData.rightLeg.rotation.x, 0, delta * 5);
+                        youssef.userData.leftLeg.rotation.x = THREE.MathUtils.lerp(youssef.userData.leftLeg.rotation.x, 0, delta * 5);
+                        youssef.userData.rightLeg.rotation.x = THREE.MathUtils.lerp(youssef.userData.rightLeg.rotation.x, 0, delta * 5);
+                    }
+
+                    // Camera slowly orbits
+                    const orbitRadius = 4;
+                    const orbitSpeed = 0.2;
+                    camera.position.x = player.position.x + Math.sin(endingPhase * orbitSpeed) * orbitRadius;
+                    camera.position.z = player.position.z + Math.cos(endingPhase * orbitSpeed) * orbitRadius;
+                    camera.position.y = 2;
+                    camera.lookAt(player.position.x, 1, player.position.z);
+
+                } else if (currentState === GameState.ENDING_NO) {
+                    endingPhase += delta;
+
+                    // Youssef walks away
+                    youssef.rotation.y = Math.PI; // Turn around
+                    youssef.position.z -= delta * 1.5;
+
+                    // Youssef walk animation
+                    youssef.userData.leftLeg.rotation.x = Math.sin(time * 10) * 0.5;
+                    youssef.userData.rightLeg.rotation.x = Math.sin(time * 10 + Math.PI) * 0.5;
+                    youssef.userData.leftArm.rotation.x = Math.sin(time * 10 + Math.PI) * 0.3;
+                    youssef.userData.rightArm.rotation.x = Math.sin(time * 10) * 0.3;
+
+                    // Kenza stands still
+                    player.userData.leftLeg.rotation.x = THREE.MathUtils.lerp(player.userData.leftLeg.rotation.x, 0, delta * 5);
+                    player.userData.rightLeg.rotation.x = THREE.MathUtils.lerp(player.userData.rightLeg.rotation.x, 0, delta * 5);
+
+                    // Tonic follows Youssef
+                    tonic.lookAt(youssef.position);
+                    tonic.position.z -= delta * 1.4;
+                    
+                    // Pooki walks to Kenza
+                    pooki.lookAt(player.position);
+                    if(pooki.position.distanceTo(player.position) > 1) {
+                        pooki.position.addScaledVector(new THREE.Vector3().subVectors(player.position, pooki.position).normalize(), delta * 1.2);
+                    }
+
+                    // Camera zooms out slowly
+                    camera.position.z += delta * 0.5;
+                    camera.position.y += delta * 0.2;
+                    camera.lookAt(player.position.x, 1, player.position.z);
+
+                    // Animate Rain
+                    const positions = rainSystem.geometry.attributes.position.array;
+                    for(let i=1; i<rainCount*3; i+=3) {
+                        positions[i] -= 10 * delta; // Fall speed
+                        if(positions[i] < 0) {
+                            positions[i] = 20; // reset to top
+                        }
+                    }
+                    rainSystem.geometry.attributes.position.needsUpdate = true;
+                } else {
+                    // Dialogues/Choices (Idle)
+                    player.userData.leftLeg.rotation.x = THREE.MathUtils.lerp(player.userData.leftLeg.rotation.x, 0, delta * 5);
+                    player.userData.rightLeg.rotation.x = THREE.MathUtils.lerp(player.userData.rightLeg.rotation.x, 0, delta * 5);
+                    youssef.userData.leftArm.rotation.x = Math.sin(time * 1.5) * 0.05 + 0.1;
+                    youssef.userData.rightArm.rotation.x = Math.sin(time * 1.5 + Math.PI) * 0.05 + 0.1;
+                }
+            }
+
+            // Global Transitions (Lerping colors for time of day)
+            scene.background.lerp(targetBgColor, delta * 0.5);
+            scene.fog.color.lerp(targetFogColor, delta * 0.5);
+            dirLight.color.lerp(targetLightColor, delta * 0.5);
+            ambientLight.intensity = THREE.MathUtils.lerp(ambientLight.intensity, targetAmbientInt, delta * 0.5);
+            
+            lamps.forEach(lamp => {
+                lamp.userData.light.intensity = THREE.MathUtils.lerp(lamp.userData.light.intensity, targetLampIntensity, delta * 2);
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start Loop
+        animate();
+
+    </script>
+</body>
+</html>
